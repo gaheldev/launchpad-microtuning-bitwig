@@ -27,14 +27,10 @@ function log(msg) {
 const ON = 127
 const OFF = 0
 
-const NOTE_ON = 0x90
-const NOTE_OFF = 0x80
-const CC = 0xb0
-
-/// 1 <= chan <= 16
-function noteOnChannel(chan) {
-    return NOTE_ON + chan - 1;
-}
+const NOTE_ON = 144
+const NOTE_OFF = 128
+const CC = 176
+const AFTERTOUCH = 160
 
 
 /* ------------------------------------------------------ */
@@ -52,11 +48,12 @@ function setMode(mode) {
 
 /* ------------------- PADS / BUTTONS  ------------------ */
 
+/// 1 <= row, column <= 9
 class PadIndex {
-    /// 1 <= row, column <= 9
     /// Class fields are not compatible with bitwig
-    // row;
-    // col;
+
+    // row;    -> from bottom
+    // col;    -> from left
     // midiId;
 
     static fromIndex(row,col) {
@@ -81,6 +78,7 @@ class PadIndex {
 // based on the builtin color palette specified by doc (page 12)
 const Palette = {
     OFF: 0,
+    GREY: 1,
     WHITE: 3,
     RED: 5,
     ORANGE: 9,
@@ -89,6 +87,11 @@ const Palette = {
     BLUE: 37,
     PURPLE: 45,
     PINK: 53,
+    LAVANDER: 49,
+    DARK_YELLOW: 14,
+    MAGENTA: 57,
+    DARK_BLUE: 43,
+    DARK_GREEN: 19,
 };
 
 // const Intensity = {
@@ -115,6 +118,15 @@ const LightingType = {
 
 function setLED(padIndex, color, lightingType=LightingType.STATIC) {
     midiOut.sendMidi(noteOnChannel(lightingType), padIndex.midiId, color);
+}
+
+function resetLEDS() {
+    for (let i = 1; i <= 8; i++) {
+        for (let j = 1; j <= 8; j++) {
+            let padIndex = PadIndex.fromIndex(i,j);
+            setLED(padIndex, edo19.color(padIndex));
+        }
+    }
 }
 
 
@@ -147,6 +159,19 @@ function getTime() {
     return d.getTime();
 }
 
+/// 1 <= chan <= 16
+function noteOnChannel(chan) {
+    return NOTE_ON + chan - 1;
+}
+
+function isPolyPressure(status) {
+    return (status >= 160 && status <= 175);
+}
+
+function isControlChange(status) {
+    return (status >= 176 && status <= 191);
+}
+
 
 /* ------------------------------------------------------ */
 /*                     INIT CONTROLLER                    */
@@ -155,6 +180,9 @@ function init() {
     // sending to host (bitwig)
     midiIn = host.getMidiInPort(0)
     midiIn.setMidiCallback(onMidi)
+    noteInput = midiIn.createNoteInput("Launchpad");
+    noteInput.setShouldConsumeEvents(false);
+    noteInput.setKeyTranslationTable(edo19.getMap()); // filter all notes
 
     // sending to controller (launchpad) -> LED
     midiOut = host.getMidiOutPort(0)
@@ -162,7 +190,9 @@ function init() {
     // Cursor track
     cursorTrack = host.createCursorTrack("CURSOR_TRACK", "Cursor Track", 0, 0, true);
 
+    // manual handling of the Launchpad
     setMode(Mode.PROGRAMMER);
+    resetLEDS();
 }
 
 function exit() {
@@ -174,13 +204,99 @@ function exit() {
 /*                   MIDI STATUS HANDLER                  */
 /* ------------------------------------------------------ */
 
+class Mapping {
+    constructor() {
+        this.divisions = 19;
+        this.rootKey = 60; // reference key to match micropitch C3
+        this.lowNote = this.rootKey - 19 * 1;
+        this.rootNote = 0;
+        this.midiMap = this.getMap();
+    }
+
+    // from left->right and then bot->top
+    index(padIndex) {
+        return 8*(padIndex.row-1) + (padIndex.col-1);
+    }
+
+    midi(padIndex) {
+        return this.lowNote + this.index(padIndex);
+    }
+
+    getMap() {
+        let m = Array(128).fill().map(() => -1); // initialize to -1 to filter all unspecified values
+        for (let i = 1; i <= 8; i++) {
+            for (let j = 1; j <= 8; j++) {
+                let padIndex = PadIndex.fromIndex(i,j);
+                // log(`row: ${padIndex.row}, col: ${padIndex.col}, index: ${this.index(padIndex)}`);
+                m[padIndex.midiId] = this.midi(padIndex);
+            }
+        }
+        return m;
+    }
+
+    color(padIndex) {
+        let offset = Math.ceil(127/this.divisions) * 19; // make sure nect line modulo is alway for positive integer
+        let degree = (this.midi(padIndex) - this.rootKey + offset) % this.divisions + 1;
+        switch (degree) {
+            case 1:  return Palette.RED;
+
+            case 4:  return Palette.GREY;
+
+            case 7:  return Palette.BLUE;
+
+            case 9:  return 61;
+
+            case 12: return Palette.MAGENTA;
+
+            case 15: return Palette.DARK_BLUE;
+
+            case 18: return Palette.GREY;
+
+            default: return Palette.OFF;
+        }
+        // switch (degree) {
+        //     case 1:  return Palette.RED;
+        //     case 2:  return Palette.DARK_YELLOW;
+        //     case 3:  return Palette.DARK_BLUE;
+        //
+        //     case 4:  return Palette.WHITE;
+        //     case 5:  return Palette.DARK_YELLOW;
+        //     case 6:  return Palette.DARK_BLUE;
+        //
+        //     case 7:  return Palette.PINK;
+        //     case 8:  return Palette.DARK_GREEN;
+        //
+        //     case 9:  return Palette.PURPLE;
+        //     case 10: return Palette.DARK_YELLOW;
+        //     case 11: return Palette.DARK_BLUE;
+        //
+        //     case 12: return Palette.ORANGE;
+        //     case 13: return Palette.DARK_YELLOW;
+        //     case 14: return Palette.DARK_BLUE;
+        //
+        //     case 15: return Palette.LAVANDER;
+        //     case 16: return Palette.DARK_YELLOW;
+        //     case 17: return Palette.DARK_BLUE;
+        //
+        //     case 18: return Palette.WHITE;
+        //     case 19: return Palette.DARK_GREEN;
+        //
+        //     default: return Palette.OFF;
+        // }
+    }
+}
+
+const edo19 = new Mapping();
+log(edo19.getMap().toString());
+
+
 /* ----------------------- NOTE ON ---------------------- */
 function handleNoteOn(cc, value) {
     try {
         log(`handleNoteOn -> ${cc} : ${value}`)
 
         padIndex = PadIndex.fromID(cc);
-        // log(`row: ${padIndex.row}, col: ${padIndex.col}`);
+        log(`row: ${padIndex.row}, col: ${padIndex.col}`);
         setLED(padIndex, Palette.GREEN);
         return
     } catch (error) {
@@ -194,7 +310,7 @@ function handleNoteOff(cc, value) {
         log(`handleNoteOff -> ${cc} : ${value}`)
 
         padIndex = PadIndex.fromID(cc);
-        setLED(padIndex, Palette.OFF);
+        setLED(padIndex, edo19.color(padIndex));
         return
     } catch (error) {
         handleError(error)
@@ -204,7 +320,7 @@ function handleNoteOff(cc, value) {
 /* --------------------- AFTERTOUCH --------------------- */
 function handleAftertouch(cc, value) {
     try {
-        log(`handleAftertouch -> ${cc} : ${value}`)
+        // log(`handleAftertouch -> ${cc} : ${value}`)
         return
     } catch (error) {
         handleError(error)
@@ -225,14 +341,6 @@ function handleButton(index, value) {
 /* ------------------------------------------------------ */
 /*                   MIDI INPUT HANDLER                   */
 /* ------------------------------------------------------ */
-function isPolyPressure(status) {
-    return (status >= 160 && status <= 175);
-}
-
-function isControlChange(status) {
-    return (status >= 176 && status <= 191);
-}
-
 function onMidi(status, cc, value) {
     switch (true) {
         case isNoteOn(status):
