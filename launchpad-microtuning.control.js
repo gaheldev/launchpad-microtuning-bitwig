@@ -201,6 +201,16 @@ function handleNoteOff(cc, value) {
     }
 }
 
+/* --------------------- AFTERTOUCH --------------------- */
+function handleAftertouch(cc, value) {
+    try {
+        log(`handleAftertouch -> ${cc} : ${value}`)
+        return
+    } catch (error) {
+        handleError(error)
+    }
+}
+
 /* ----------------------- BUTTONS ---------------------- */
 function isButton(cc, value) {
     const ccString = `${cc}`;
@@ -215,15 +225,32 @@ function handleButton(index, value) {
 /* ------------------------------------------------------ */
 /*                   MIDI INPUT HANDLER                   */
 /* ------------------------------------------------------ */
+function isPolyPressure(status) {
+    return (status >= 160 && status <= 175);
+}
+
+function isControlChange(status) {
+    return (status >= 176 && status <= 191);
+}
+
 function onMidi(status, cc, value) {
     switch (true) {
         case isNoteOn(status):
-            if (isButton(cc)) handleButton(cc, value);
-            else if (value === 0) handleNoteOff(cc, value);
+            if (value === 0) handleNoteOff(cc, value);
             else handleNoteOn(cc, value);
             break;
 
-        case isNoteOff(status): handleNoteOff(cc, value); break;
+        case isNoteOff(status):
+            handleNoteOff(cc, value);
+            break;
+
+        case isControlChange(status):
+            if (isButton(cc, value)) handleButton(cc, value);
+            break;
+
+        case isPolyPressure(status):
+            handleAftertouch(cc, value);
+            break;
 
         default:
             log(`UNKNOWN STATUS: ${status}, cc: ${cc}, value: ${value}`)

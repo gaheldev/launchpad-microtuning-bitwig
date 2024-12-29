@@ -9,7 +9,9 @@ Novation Launchpad X Controller script to play 19EDO
 # Todo
 
 - [X] Connect to device
-- [ ] press pad sends midi note
+- [ ] press pad sends midi note on
+- [ ] release pad sends midi note off
+- [ ] aftertouch
 - [ ] scrolling changes octaves (need to remap pads to new midi notes)
 - [ ] Map pads to chromatic scale (C root note, left->right, bottom->up)
 - [X] Control lights
