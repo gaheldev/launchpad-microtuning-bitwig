@@ -225,17 +225,14 @@ class Mapping {
         this.rootKey = 60; // reference key to match micropitch C3
         this.lowNote = this.rootKey - 19 * 1;
         this.rootNote = 0;
-        this.midiMap = this.getMap();
+        this.midiMap = this.getMap(); // pad -> midi
     }
 
-    // chromaticfrom left->right and then bot->top
-    // index(padIndex) {
-    //     return 8*(padIndex.row-1) + (padIndex.col-1);
-    // }
-
-    // for 5 fingers chromaticfrom left->right and then bot->top
-    index(padIndex) {
-        return 5*(padIndex.row-1) + (padIndex.col-1);
+    // for n fingers chromaticfrom left->right and then bot->top
+    // 8  fingers -> chromatic with no repeating notes
+    // 5  fingers -> chromatic while staying inside 5 columns
+    index(padIndex, fingers=5) {
+        return fingers*(padIndex.row-1) + (padIndex.col-1);
     }
 
     midi(padIndex) {
@@ -254,8 +251,24 @@ class Mapping {
         return m;
     }
 
+    getEquivalentPads(midiId) {
+        // let m = Array(128).fill().map(() => -1); // initialize to -1 to filter all unspecified values
+        let pads = [];
+        for (let i = 1; i <= 8; i++) {
+            for (let j = 1; j <= 8; j++) {
+                let padIndex = PadIndex.fromIndex(i,j);
+                if (this.midi(padIndex) === this.midiMap[midiId])
+                {
+                    // log(`MIDI ID: ${midiId}, row: ${padIndex.row}, col: ${padIndex.col}, padId: ${padIndex.midiId}`);
+                    pads.push(padIndex)
+                }
+            }
+        }
+        return pads;
+    }
+
     color(padIndex) {
-        let offset = Math.ceil(127/this.divisions) * 19; // make sure nect line modulo is alway for positive integer
+        let offset = Math.ceil(127/this.divisions) * 19; // make sure next line modulo is alway for positive integer
         let degree = (this.midi(padIndex) - this.rootKey + offset) % this.divisions + 1;
 
         switch (degree) {
@@ -270,7 +283,7 @@ class Mapping {
             case 7:   return adjustBrightness(Palette.WHITE, 1.0);
             case 8:   return adjustBrightness(Palette.PALE_GREEN, 0.1);
 
-            case 9:   return adjustBrightness(Palette.PINK, 1.0);
+            case 9:   return adjustBrightness(Palette.WHITE, 1.0);
             case 10:  return adjustBrightness(Palette.BLUE, 0.1);
             case 11:  return adjustBrightness(Palette.ORANGE, 0.1);
 
@@ -301,7 +314,11 @@ function handleNoteOn(cc, value) {
 
         padIndex = PadIndex.fromID(cc);
         log(`row: ${padIndex.row}, col: ${padIndex.col}`);
-        setRGB(padIndex, Palette.GREEN);
+        for (const padIndex of edo19.getEquivalentPads(cc))
+        {
+            log(padIndex.toString());
+            setRGB(padIndex, Palette.GREEN);
+        }
         return
     } catch (error) {
         handleError(error)
@@ -314,7 +331,8 @@ function handleNoteOff(cc, value) {
         log(`handleNoteOff -> ${cc} : ${value}`)
 
         padIndex = PadIndex.fromID(cc);
-        setRGB(padIndex, edo19.color(padIndex));
+        for (const padIndex of edo19.getEquivalentPads(cc))
+            setRGB(padIndex, edo19.color(padIndex));
         return
     } catch (error) {
         handleError(error)

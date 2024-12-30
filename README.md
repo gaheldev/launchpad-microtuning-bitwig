@@ -14,8 +14,9 @@ Novation Launchpad X Controller script to play 19EDO
 - [X] aftertouch
 - [ ] scrolling changes octaves (need to remap pads to new midi notes)
 - [X] Map pads to chromatic scale (C root note, left->right, bottom->up)
-- [ ] More ergonomic layout (for 5 fingers)
+- [X] More ergonomic layout (for 5 fingers)
 - [X] Control lights
 - [X] Map lights to octaves and other meaningful notes
+- [ ] Queue for notes when playing same note with multiple pads
 - [ ] Other maps? Other root?
 - [ ] Other scales?
