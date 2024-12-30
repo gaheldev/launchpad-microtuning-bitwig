@@ -36,6 +36,14 @@ const AFTERTOUCH = 160
 /* ------------------------------------------------------ */
 /*                        HARDWARE                        */
 /* ------------------------------------------------------ */
+const SYSEX_HEADER = "F0 00 20 29 02 0C";
+const SYSEX_FOOTER = "F7";
+
+function sysex(msg) {
+    log(SYSEX_HEADER + ` ${msg} ` + SYSEX_FOOTER);
+    midiOut.sendSysex(SYSEX_HEADER + ` ${msg} ` + SYSEX_FOOTER);
+}
+
 const Mode = {
     LIVE: 0,
     PROGRAMMER: 1,
@@ -43,7 +51,7 @@ const Mode = {
 
 function setMode(mode) {
     const modeHex = mode == 0 ? "00" : "01";
-    midiOut.sendSysex(`F0 00 20 29 02 0C 0E ${modeHex} F7`);
+    midiOut.sendSysex(SYSEX_HEADER + ` 0E ${modeHex} F7`);
 }
 
 /* ------------------- PADS / BUTTONS  ------------------ */
