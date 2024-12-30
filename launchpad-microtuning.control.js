@@ -51,7 +51,7 @@ const Mode = {
 
 function setMode(mode) {
     const modeHex = mode == 0 ? "00" : "01";
-    midiOut.sendSysex(SYSEX_HEADER + ` 0E ${modeHex} F7`);
+    sysex(`0E ${modeHex}`);
 }
 
 /* ------------------- PADS / BUTTONS  ------------------ */
@@ -83,56 +83,58 @@ class PadIndex {
 
 
 /* ----------------------- PALETTE ----------------------- */
-// based on the builtin color palette specified by doc (page 12)
 const Palette = {
-    OFF: 0,
-    GREY: 1,
-    WHITE: 3,
-    RED: 5,
-    ORANGE: 9,
-    GREEN: 21,
-    PALE_GREEN: 17,
-    BLUE: 37,
-    PURPLE: 45,
-    PINK: 53,
-    LAVANDER: 49,
-    DARK_YELLOW: 14,
-    MAGENTA: 57,
-    DARK_BLUE: 43,
-    DARK_GREEN: 19,
-};
-
-// const Intensity = {
-//     LOWEST: 0,
-//     LOW: 3,
-//     MID: 2,
-//     HIGH: 1,    
-// };
-
-// paletteIndex(color, instensity) {
-//     return color + intensity;
-// };
+    OFF: [0, 0, 0],
+    WHITE: [127, 127, 127],
+    BLUE: [8, 75, 127],
+    PINK: [127, 0, 103],
+    PALE_GREEN: [99, 127, 0],
+    GREEN: [0,127,0],
+    ORANGE: [127, 73, 0],
+}
 
 
 /* ------------------------- LED ------------------------ */
 
 /// channel on which the message should be sent
 const LightingType = {
-    STATIC: 1,
-    FLASHING: 2,
-    PULSING: 3,
-    RGB: 4,
+    STATIC: 0,
+    FLASHING: 1,
+    PULSING: 2,
+    RGB: 3,
 }
 
+/// color in [0,127] is from the default palette defined page 12 of the reference
+/// favor setRGB
 function setLED(padIndex, color, lightingType=LightingType.STATIC) {
-    midiOut.sendMidi(noteOnChannel(lightingType), padIndex.midiId, color);
+    midiOut.sendMidi(noteOnChannel(lightingType+1), padIndex.midiId, color);
 }
+
+function adjustBrightness(rgbColor, brightness) {
+    return [Math.round(rgbColor[0]*brightness),
+            Math.round(rgbColor[1]*brightness),
+            Math.round(rgbColor[2]*brightness),
+            ]
+}
+
+function setRGB(padIndex, rgbColor, brightness=1.0) {
+    let adjustedColor = adjustBrightness(rgbColor, brightness);
+    sysex(  '03 ' 
+          + toHex(LightingType.RGB) + ' '
+          + toHex(padIndex.midiId) + ' '
+          + toHex(adjustedColor[0]) + ' '
+          + toHex(adjustedColor[1]) + ' '
+          + toHex(adjustedColor[2])
+    );
+}
+
+
 
 function resetLEDS() {
     for (let i = 1; i <= 8; i++) {
         for (let j = 1; j <= 8; j++) {
             let padIndex = PadIndex.fromIndex(i,j);
-            setLED(padIndex, edo19.color(padIndex));
+            setRGB(padIndex, edo19.color(padIndex));
         }
     }
 }
@@ -180,6 +182,11 @@ function isControlChange(status) {
     return (status >= 176 && status <= 191);
 }
 
+/// return hexa string with 2 numbers from int
+function toHex(d) {
+    return  ("0"+(Number(d).toString(16))).slice(-2).toUpperCase()
+}
+
 
 /* ------------------------------------------------------ */
 /*                     INIT CONTROLLER                    */
@@ -221,9 +228,14 @@ class Mapping {
         this.midiMap = this.getMap();
     }
 
-    // from left->right and then bot->top
+    // chromaticfrom left->right and then bot->top
+    // index(padIndex) {
+    //     return 8*(padIndex.row-1) + (padIndex.col-1);
+    // }
+
+    // for 5 fingers chromaticfrom left->right and then bot->top
     index(padIndex) {
-        return 8*(padIndex.row-1) + (padIndex.col-1);
+        return 5*(padIndex.row-1) + (padIndex.col-1);
     }
 
     midi(padIndex) {
@@ -245,57 +257,41 @@ class Mapping {
     color(padIndex) {
         let offset = Math.ceil(127/this.divisions) * 19; // make sure nect line modulo is alway for positive integer
         let degree = (this.midi(padIndex) - this.rootKey + offset) % this.divisions + 1;
+
         switch (degree) {
-            case 1:  return Palette.RED;
+            case 1:   return adjustBrightness(Palette.PINK, 1.0);
+            case 2:   return adjustBrightness(Palette.BLUE, 0.1);
+            case 3:   return adjustBrightness(Palette.ORANGE, 0.1);
 
-            case 4:  return Palette.GREY;
+            case 4:   return adjustBrightness(Palette.WHITE, 1.0);
+            case 5:   return adjustBrightness(Palette.BLUE, 0.1);
+            case 6:   return adjustBrightness(Palette.ORANGE, 0.1);
 
-            case 7:  return Palette.BLUE;
+            case 7:   return adjustBrightness(Palette.WHITE, 1.0);
+            case 8:   return adjustBrightness(Palette.PALE_GREEN, 0.1);
 
-            case 9:  return 61;
+            case 9:   return adjustBrightness(Palette.PINK, 1.0);
+            case 10:  return adjustBrightness(Palette.BLUE, 0.1);
+            case 11:  return adjustBrightness(Palette.ORANGE, 0.1);
 
-            case 12: return Palette.MAGENTA;
+            case 12:  return adjustBrightness(Palette.WHITE, 1.0);
+            case 13:  return adjustBrightness(Palette.BLUE, 0.1);
+            case 14:  return adjustBrightness(Palette.ORANGE, 0.1);
 
-            case 15: return Palette.DARK_BLUE;
+            case 15:  return adjustBrightness(Palette.WHITE, 1.0);
+            case 16:  return adjustBrightness(Palette.BLUE, 0.1);
+            case 17:  return adjustBrightness(Palette.ORANGE, 0.1);
 
-            case 18: return Palette.GREY;
+            case 18:  return adjustBrightness(Palette.WHITE, 1.0);
+            case 19:  return adjustBrightness(Palette.PALE_GREEN, 0.1);
 
             default: return Palette.OFF;
         }
-        // switch (degree) {
-        //     case 1:  return Palette.RED;
-        //     case 2:  return Palette.DARK_YELLOW;
-        //     case 3:  return Palette.DARK_BLUE;
-        //
-        //     case 4:  return Palette.WHITE;
-        //     case 5:  return Palette.DARK_YELLOW;
-        //     case 6:  return Palette.DARK_BLUE;
-        //
-        //     case 7:  return Palette.PINK;
-        //     case 8:  return Palette.DARK_GREEN;
-        //
-        //     case 9:  return Palette.PURPLE;
-        //     case 10: return Palette.DARK_YELLOW;
-        //     case 11: return Palette.DARK_BLUE;
-        //
-        //     case 12: return Palette.ORANGE;
-        //     case 13: return Palette.DARK_YELLOW;
-        //     case 14: return Palette.DARK_BLUE;
-        //
-        //     case 15: return Palette.LAVANDER;
-        //     case 16: return Palette.DARK_YELLOW;
-        //     case 17: return Palette.DARK_BLUE;
-        //
-        //     case 18: return Palette.WHITE;
-        //     case 19: return Palette.DARK_GREEN;
-        //
-        //     default: return Palette.OFF;
-        // }
     }
 }
 
 const edo19 = new Mapping();
-log(edo19.getMap().toString());
+// log(edo19.getMap().toString());
 
 
 /* ----------------------- NOTE ON ---------------------- */
@@ -305,7 +301,7 @@ function handleNoteOn(cc, value) {
 
         padIndex = PadIndex.fromID(cc);
         log(`row: ${padIndex.row}, col: ${padIndex.col}`);
-        setLED(padIndex, Palette.GREEN);
+        setRGB(padIndex, Palette.GREEN);
         return
     } catch (error) {
         handleError(error)
@@ -318,7 +314,7 @@ function handleNoteOff(cc, value) {
         log(`handleNoteOff -> ${cc} : ${value}`)
 
         padIndex = PadIndex.fromID(cc);
-        setLED(padIndex, edo19.color(padIndex));
+        setRGB(padIndex, edo19.color(padIndex));
         return
     } catch (error) {
         handleError(error)
