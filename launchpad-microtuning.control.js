@@ -7,7 +7,7 @@ host.defineMidiPorts(1, 1)
 /* ------------------------------------------------------ */
 /*                    DEBUGGING FEATURE                   */
 /* ------------------------------------------------------ */
-var DEBUG = true
+var DEBUG = false
 
 function debug(bool = false) {
     DEBUG = bool
@@ -52,6 +52,17 @@ const Mode = {
 function setMode(mode) {
     const modeHex = mode == 0 ? "00" : "01";
     sysex(`0E ${modeHex}`);
+}
+
+const VelocityCurve = {
+    LOW: '00',
+    MEDIUM: '01',
+    HIGH: '02',
+    FIXED: '03',
+};
+
+function setVelocity(curve, defaultVelocity = "7F") {
+    sysex(`04 ${curve} ${defaultVelocity}`);
 }
 
 /* ------------------- PADS / BUTTONS  ------------------ */
@@ -192,6 +203,24 @@ function toHex(d) {
 /*                     INIT CONTROLLER                    */
 /* ------------------------------------------------------ */
 function init() {
+    velocitySetting = host.getPreferences().getEnumSetting(
+        "Sensitivity",
+        "Velocity",
+        Object.keys(VelocityCurve),
+        "MEDIUM"
+    )
+
+    velocityDefault = host.getPreferences().getNumberSetting(
+        "Fixed Value",
+        "Velocity",
+        1,
+        127,
+        1,
+        "",
+        127
+    )
+
+
     // sending to host (bitwig)
     midiIn = host.getMidiInPort(0)
     midiIn.setMidiCallback(onMidi)
@@ -208,6 +237,17 @@ function init() {
     // manual handling of the Launchpad
     setMode(Mode.PROGRAMMER);
     resetLEDS();
+
+    // settings
+    velocitySetting.addValueObserver(function(value) {
+        const fixedVel = Math.round(velocityDefault.getRaw()) // get value from original range and convert it to int
+        setVelocity(VelocityCurve[value],toHex(fixedVel));
+    });
+
+    velocityDefault.addValueObserver(function(value) {
+        const fixedVel = Math.round(value*127) // value is between 0 and 1 for some reason
+        setVelocity(VelocityCurve[velocitySetting.get()],toHex(fixedVel));
+    });
 }
 
 function exit() {
@@ -316,7 +356,6 @@ function handleNoteOn(cc, value) {
         log(`row: ${padIndex.row}, col: ${padIndex.col}`);
         for (const padIndex of edo19.getEquivalentPads(cc))
         {
-            log(padIndex.toString());
             setRGB(padIndex, Palette.GREEN);
         }
         return
